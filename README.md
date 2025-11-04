@@ -147,9 +147,76 @@ def get_initial_image() -> Image:
     return img
 ```
 
-The code for the top right panel is very similar, except excluding two of the overlays. The code for the bottom panel is slightly different:
+The code for the top right panel is very similar, except excluding two of the overlays. The code for the bottom panel is slightly different, with a custom viewport overlay for the scale bar:
 
 ```py
+
+class ScaleBarOverlay(ViewportOverlayInterface):
+
+    # Adjustable user parameters:
+
+    # World-space length of the scale bar:
+    length = Range(value=2.0, low=0.0, label='Length (nm)')
+
+    # Screen-space height of the scale bar:
+    height = Range(value=0.05, low=0.0, high=0.2, label='Height')
+
+    # Bar color:
+    bar_color = Color(default=(0.0, 0.0, 0.0), label='Bar color')
+
+    # Text color:
+    text_color = Color(default=(0.0, 0.0, 0.0), label='Text color')
+
+    def render(self, canvas: ViewportOverlayInterface.Canvas, data: DataCollection, **kwargs):
+        # Compute the center coordinates of the simulation cell.
+        center = data.cell @ (0.5, 0.5, 0.5, 1.0)
+
+        # Compute length of bar in screen space - as a fraction of the canvas height.
+        screen_length = canvas.project_length(center, self.length)
+        screen_length *= 10 * canvas.logical_size[1] / canvas.logical_size[0]
+
+        # Base position
+        x0, y0 = 0.05, 0.05
+        bar_thickness = self.height * 0.2  # relative thickness of main line
+        tick_height = self.height * 1.5
+
+        # Make a 1×1 image of the chosen color
+        image = QtGui.QImage(1, 1, canvas.preferred_qimage_format)
+        image.fill(QtGui.QColor.fromRgbF(*self.bar_color))
+
+        # Draw main horizontal bar
+        canvas.draw_image(
+            image,
+            pos=(x0, y0),
+            size=(screen_length, bar_thickness),
+            anchor="south west"
+        )
+
+        # Draw left tick
+        canvas.draw_image(
+            image,
+            pos=(x0, y0 - 0.5 * (tick_height - bar_thickness)),
+            size=(bar_thickness, tick_height),
+            anchor="south west"
+        )
+
+        # Draw right tick
+        canvas.draw_image(
+            image,
+            pos=(x0 + screen_length - bar_thickness, y0 - 0.5 * (tick_height - bar_thickness)),
+            size=(bar_thickness, tick_height),
+            anchor="south west"
+        )
+
+        # Draw text label centered below
+        canvas.draw_text(
+            f"{self.length:.1f} nm",
+            pos=(x0 + 0.5 * screen_length, y0 + 0.6 * tick_height),
+            font_size=0.75 * self.height,
+            anchor="south",
+            color=self.text_color
+        )
+
 def get_segregation_profile() -> Image:
 
     frame = import_file("kmc-trajectory/1000.xyz")
